@@ -36,7 +36,8 @@ class Store:
 
     # canonical hires
     def save_hire(self, hire_id: str, canonical: dict):
-        self.db.execute("INSERT INTO hires VALUES(?,?,?) ON CONFLICT(hire_id) DO UPDATE SET canonical=excluded.canonical, updated_at=excluded.updated_at",
+        self.db.execute("INSERT INTO hires VALUES(?,?,?) ON CONFLICT(hire_id) DO UPDATE SET "
+                        "canonical=excluded.canonical, updated_at=excluded.updated_at",
                         (hire_id, json.dumps(canonical, default=str), _now()))
         self.db.commit()
 

@@ -9,6 +9,12 @@ Everything runs on **mocked systems**. No credentials, no network and no real da
 Requires Python 3.10+.
 
 ```bash
+# Create a virtual environment named "env"
+python3 -m venv env
+
+# Activate it
+source env/bin/activate
+
 pip install -r requirements.txt     # pytest always; anthropic only needed for --live
 python -m pytest                    # 26 tests + coverage report (fails under 90%)
 python -m bu_sync.demo              # plain-English walkthrough, 10 self-checking scenarios (offline rules stand in for Claude)

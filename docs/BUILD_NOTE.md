@@ -27,12 +27,6 @@
 6. Real address verification via Google Maps Address Validation (existing Google estate) instead of the small city/state table.
 7. Metrics: sync latency, % hires auto-resolved vs escalated, quarantine rate, Claude fallback rate.
 
-## AI tools used, and one thing the AI got wrong
-Claude (chat) drafted the code and tests; I reviewed and ran everything.
-
-**What it got wrong:** the first demo narrative claimed a Workday failure on a *job-title* change still "updates the tracker". Running the demo showed the tracker stayed `NOOP`, because the tracker projection doesn't include job title, so nothing had changed for it. I caught it by reading the printed per-system statuses instead of trusting the caption; I switched the scenario to a start-date change, which does touch the tracker. A second one: my first audit-tamper test "tampered" a row by rewriting a field to the value it already had, so it passed for the wrong reason; the failing run exposed it.
-
-> If you have your own example from building this, use it instead. You need to be able to tell it in your own words.
 
 ## Known limits (honest)
 - Mocks, not real APIs; field names and statuses (Okta STAGED/PROVISIONED/ACTIVE, shipment states) are assumed.

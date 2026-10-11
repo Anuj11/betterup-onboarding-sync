@@ -34,7 +34,8 @@ def validate(h: Hire, today: date) -> list[Issue]:
             out.append(Issue("error", f, "NAME_EMPTY", f"{f} is empty"))
         elif v != v.strip() or not NAME_RE.match(v):
             out.append(Issue("error", f, "NAME_CHARS",
-                             f"{f}={v!r} has digits/symbols/extra whitespace; it would flow into the Okta login and shipping label"))
+                             f"{f}={v!r} has digits/symbols/extra whitespace; it would flow into the Okta login and "
+                             f"shipping label"))
         elif v.isupper() or v.islower():
             out.append(Issue("warning", f, "NAME_CASE", f"{f}={v!r} looks mis-cased"))
     if h.first_name and h.first_name.strip().lower() == h.last_name.strip().lower():

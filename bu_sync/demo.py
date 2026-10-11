@@ -121,7 +121,8 @@ def main(live: bool = False) -> bool:
     # 1 -----------------------------------------------------------------------------------
     r.scenario("First sync of new hires, including one created outside Ashby",
                "Two hires (Jon Smyth, Maria Garcia) are in Ashby. A third (Priya Nair) was entered directly in Workday.",
-               "Ashby hires reach all four systems. The Workday-only hire is discovered and her other systems are set up, "
+               "Ashby hires reach all four systems. The Workday-only hire is discovered and her other systems are set "
+               "up,"
                "without writing back to Workday.")
     ra, rb = orch.process(a), orch.process(b)
     r.result(ra, "Jon Smyth (H-1001)")
@@ -131,16 +132,23 @@ def main(live: bool = False) -> bool:
         "job_title": "Data Analyst", "manager_email": "mgr3@betterup.com", "personal_email": "priya.n@gmail.com",
         "home_address": vars(Address("12 Pine St", "Seattle", "WA", "98101"))}}
     found = orch.discover_off_cycle()
-    r.check(set(ra.values()) == {"APPLIED"} and set(rb.values()) == {"APPLIED"}, "Both Ashby hires were created in all four systems")
-    r.check(found == ["H-9001"] and sys_["okta"].get_state("H-9001")["exists"], "Priya (Workday-only) was discovered and given an Okta account")
-    r.check(not sys_["workday"].write_log or all(h != "H-9001" for h, _ in sys_["workday"].write_log), "Workday was not overwritten for Priya (it is her source)")
+    r.check(set(ra.values()) == {"APPLIED"} and set(rb.values()) == {"APPLIED"}, "Both Ashby hires were created in "
+                                                                                 "all four systems")
+    r.check(found == ["H-9001"] and sys_["okta"].get_state("H-9001")["exists"], "Priya (Workday-only) was discovered "
+                                                                                "and given an Okta account")
+    r.check(not sys_["workday"].write_log or all(h != "H-9001" for h, _ in sys_["workday"].write_log), "Workday was "
+                                                                                                       "not "
+                                                                                                       "overwritten "
+                                                                                                       "for Priya (it "
+                                                                                                       "is her source)")
 
     # 2 -----------------------------------------------------------------------------------
     r.scenario("The same update arrives twice",
                "Ashby re-sends the same event (webhook retry) and the nightly poll sees it again.",
                "Nothing is written a second time.")
     before = writes(sys_)
-    res = orch.process(a); orch.process(b)
+    res = orch.process(a);
+    orch.process(b)
     delta = {k: writes(sys_)[k] - before[k] for k in before}
     r.result(res)
     r.check(sum(delta.values()) == 0, f"Zero new writes across all systems (new writes: {sum(delta.values())})")
@@ -148,15 +156,19 @@ def main(live: bool = False) -> bool:
     # 3 -----------------------------------------------------------------------------------
     r.scenario("Start date changes after the offer",
                "Jon's start date moves from Mon 26 Oct to Mon 2 Nov.",
-               "Every system that depends on the date is updated, including the hardware and background-check deadlines.")
+               "Every system that depends on the date is updated, including the hardware and background-check "
+               "deadlines.")
     t0 = sys_["tracker"].get_state("H-1001")["payload"]
     a = replace(a, start_date=date(2026, 11, 2))
     res = orch.process(a)
     t1 = sys_["tracker"].get_state("H-1001")["payload"]
     r.result(res)
-    r.note(f"Tracker before -> after:  cohort {t0['cohort']} -> {t1['cohort']};  hardware form due {t0['hardware_form_due']} -> {t1['hardware_form_due']}")
+    r.note(
+        f"Tracker before -> after:  cohort {t0['cohort']} -> {t1['cohort']};"
+        f"hardware form due {t0['hardware_form_due']} -> {t1['hardware_form_due']}")
     r.check(set(res.values()) == {"APPLIED"}, "All four systems received the new date")
-    r.check(t1["hardware_form_due"] == "2026-10-26" and sys_["equipment"].get_state("H-1001")["payload"]["ship_by"] == "2026-10-26",
+    r.check(t1["hardware_form_due"] == "2026-10-26" and sys_["equipment"].get_state("H-1001")["payload"][
+        "ship_by"] == "2026-10-26",
             "Deadlines were recalculated to 7 days before the new start date (26 Oct), with no manual work")
 
     # 4 -----------------------------------------------------------------------------------
@@ -164,19 +176,24 @@ def main(live: bool = False) -> bool:
                "Jon's record is edited to: first name 'J0n' (a zero), ZIP '9410' (4 digits), start date on a Saturday.",
                "The edit is stopped BEFORE it reaches any system. The team gets one alert, not one per retry.")
     before = writes(sys_)
-    bad = replace(a, first_name="J0n", start_date=date(2026, 10, 31), address=Address("1 Market St", "San Francisco", "CA", "9410"))
+    bad = replace(a, first_name="J0n", start_date=date(2026, 10, 31),
+                  address=Address("1 Market St", "San Francisco", "CA", "9410"))
     for e in errors(validate(bad, TODAY)):
         r.note(f"Problem found - {e.field}: {e.message}", "      ")
-    res = orch.process(bad); orch.process(bad)
+    res = orch.process(bad);
+    orch.process(bad)
     r.result(res)
     delta = sum(writes(sys_)[k] - before[k] for k in before)
     r.check(delta == 0, "No system was changed (the bad name never reached Okta, shipping labels or the tracker)")
-    r.check(sys_["tracker"].get_state("H-1001")["payload"]["name"] == "Jon Smyth", "Downstream data still holds the last good values")
-    r.check(sum("BAD_DATA" in m for _, m in slack.messages) == 1, "Only one alert was sent even though the bad record arrived twice")
+    r.check(sys_["tracker"].get_state("H-1001")["payload"]["name"] == "Jon Smyth",
+            "Downstream data still holds the last good values")
+    r.check(sum("BAD_DATA" in m for _, m in slack.messages) == 1,
+            "Only one alert was sent even though the bad record arrived twice")
 
     # 5 -----------------------------------------------------------------------------------
     r.scenario("Okta has a hiccup in the middle of an update",
-               "Maria's start date changes. Okta first returns an error (503), then accepts the change but the reply is lost (timeout).",
+               "Maria's start date changes. Okta first returns an error (503), then accepts the change but the reply "
+               "is lost (timeout).",
                "The system retries safely. Okta ends up with exactly one update, not duplicates.")
     b2 = replace(b, start_date=date(2026, 11, 9))
     sys_["okta"].inject("transient", "timeout_after_apply")
@@ -185,12 +202,15 @@ def main(live: bool = False) -> bool:
     retries = sum(1 for x in store.audit_rows("H-1002") if x["event"] == "RETRY" and x["system"] == "okta")
     r.result(res)
     r.check(retries == 2, f"Okta was retried {retries} times after the two failures")
-    r.check(writes(sys_)["okta"] - before == 1, "Okta recorded exactly 1 real change (the retry was recognised as a repeat, not applied twice)")
+    r.check(writes(sys_)["okta"] - before == 1,
+            "Okta recorded exactly 1 real change (the retry was recognised as a repeat, not applied twice)")
 
     # 6 -----------------------------------------------------------------------------------
     r.scenario("A name typo is fixed AFTER the Okta account exists",
-               "Jon's surname 'Smyth' is corrected to 'Smith', and the first name 'Jon' to 'John'. Changing it would change his login email.",
-               "This is a risky change, so a decision is made: update the login (keeping the old one as an alias) or hold it back.")
+               "Jon's surname 'Smyth' is corrected to 'Smith', and the first name 'Jon' to 'John'. Changing it would "
+               "change his login email.",
+               "This is a risky change, so a decision is made: update the login (keeping the old one as an alias) or "
+               "hold it back.")
     sys_["okta"].records["H-1001"]["status"] = "PROVISIONED"
     fixed = replace(a, first_name="John", last_name="Smith")
     res = orch.process(fixed)
@@ -198,8 +218,9 @@ def main(live: bool = False) -> bool:
     okta = sys_["okta"].records["H-1001"]
     r.result(res)
     r.note(f"Decision: {d.get('action')}  (made by: {d.get('by')})  Reason: {d.get('why')}")
-    r.check(okta["payload"]["login"] == "john.smith@betterup.com" and "jon.smyth@betterup.com" in okta.get("aliases", []),
-            "Login is now john.smith@betterup.com, and the old jon.smyth@betterup.com still works as an alias")
+    r.check(
+        okta["payload"]["login"] == "john.smith@betterup.com" and "jon.smyth@betterup.com" in okta.get("aliases", []),
+        "Login is now john.smith@betterup.com, and the old jon.smyth@betterup.com still works as an alias")
 
     # 7 -----------------------------------------------------------------------------------
     r.scenario("Address changes after the laptop shipping label was created",
@@ -211,7 +232,8 @@ def main(live: bool = False) -> bool:
     d = decision(store, "H-1001", "equipment")
     r.result(res)
     r.note(f"Decision: {d.get('action')}  (made by: {d.get('by')})  Reason: {d.get('why')}")
-    r.check(sys_["equipment"].records["H-1001"].get("voided_labels") == 1, "The old label was voided and the new address applied")
+    r.check(sys_["equipment"].records["H-1001"].get("voided_labels") == 1,
+            "The old label was voided and the new address applied")
 
     r.scenario("Address changes again, but the laptop has already shipped",
                "Jon changes address once more, after the package left the warehouse.",
@@ -226,21 +248,26 @@ def main(live: bool = False) -> bool:
 
     # 8 -----------------------------------------------------------------------------------
     r.scenario("Workday rejects an update",
-               "Maria's start date moves again, but Workday (the HR system everything else depends on) returns an error.",
-               "Systems that depend on Workday wait. The tracker, which depends on nothing, still updates. The next run fixes the rest.")
+               "Maria's start date moves again, but Workday (the HR system everything else depends on) returns an "
+               "error.",
+               "Systems that depend on Workday wait. The tracker, which depends on nothing, still updates. The next "
+               "run fixes the rest.")
     sys_["workday"].inject("permanent")
     b3 = replace(b2, start_date=date(2026, 11, 16))
     res1 = orch.process(b3)
     res2 = orch.process(b3)
     r.result(res1, "Run 1 (Workday failing)")
     r.result(res2, "Run 2 (next scheduled run)")
-    r.check(res1["workday"] == "FAILED" and res1["okta"] == res1["equipment"] == "BLOCKED_UPSTREAM" and res1["tracker"] == "APPLIED",
+    r.check(res1["workday"] == "FAILED" and res1["okta"] == res1["equipment"] == "BLOCKED_UPSTREAM" and res1[
+        "tracker"] == "APPLIED",
             "While Workday failed: Okta and Equipment waited, the Tracker still updated")
-    r.check(res2["workday"] == res2["okta"] == res2["equipment"] == "APPLIED", "On the next run everything caught up with no manual cleanup")
+    r.check(res2["workday"] == res2["okta"] == res2["equipment"] == "APPLIED",
+            "On the next run everything caught up with no manual cleanup")
 
     # 9 -----------------------------------------------------------------------------------
     r.scenario("Audit trail",
-               "Every decision and write above was logged in a tamper-evident record (each entry includes a fingerprint of the one before it).",
+               "Every decision and write above was logged in a tamper-evident record (each entry includes a "
+               "fingerprint of the one before it).",
                "The log verifies as intact, and any edit to an old entry is detected.")
     rows = len(store.audit_rows())
     intact = store.verify_audit()

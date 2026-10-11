@@ -37,7 +37,7 @@ def assess(system: System, live: dict, want: dict, last_applied: dict | None) ->
                               [Action.APPLY_FORCE, Action.HOLD], Action.HOLD)
         if moved and status in ("SHIPPED", "DELIVERED"):
             return Assessment(False, "ALREADY_SHIPPED",
-                              f"shipment is {status}; address/recipient cannot be changed via API",
+                              f"shipment is {status} address/recipient cannot be changed via API",
                               [Action.NOTIFY_ONLY, Action.HOLD], Action.HOLD)
 
     if system is System.WORKDAY and status == "HIRED" and payload.get("start_date") != want["start_date"]:

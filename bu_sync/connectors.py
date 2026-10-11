@@ -108,4 +108,9 @@ class MockSlack:
 
 
 def build_systems():
-    return {"workday": MockWorkday(), "okta": MockOkta(), "equipment": MockEquipment(), "tracker": MockTracker()}
+    return {
+        "workday": MockWorkday(),
+        "okta": MockOkta(),
+        "equipment": MockEquipment(),
+        "tracker": MockTracker()
+    }

@@ -40,13 +40,13 @@ class Orchestrator:
         errs = errors(issues)
         if errs:
             return self._quarantine(hire, errs)
-        self.store.kv_set(f"quarantine:{hid}", "")        # clear so a future bad edit alerts again
+        self.store.kv_set(f"quarantine:{hid}", "")  # clear so a future bad edit alerts again
         for i in issues:
             self.store.audit(hid, None, "VALIDATION_WARNING", {"code": i.code, "msg": i.message})
 
         ok_systems: set[System] = set()
         for system in SYNC_ORDER:
-            if hire.source == system.value:               # source system: never write back
+            if hire.source == system.value:  # source system: never write back
                 ok_systems.add(system)
                 continue
             status = self._sync_one(hire, system, ok_systems)
@@ -94,10 +94,10 @@ class Orchestrator:
                "safe_default": a.safe_default.value}
         try:
             d = self.handler.decide(ctx)
-        except Exception as e:                                # handler must never break the pipeline
+        except Exception as e:  # handler must never break the pipeline
             d = OfflineHandler().decide(ctx)
             d.rationale += f" (handler error: {type(e).__name__})"
-        if d.action not in a.allowed_actions:                 # GUARD: model output is advisory
+        if d.action not in a.allowed_actions:  # GUARD: model output is advisory
             self.store.audit(hire.hire_id, system.value, "DECISION_REJECTED",
                              {"proposed": d.action.value, "allowed": ctx["allowed_actions"]})
             d = Decision(a.safe_default, f"guard override of {d.action.value}: {d.rationale}",
@@ -135,7 +135,7 @@ class Orchestrator:
         payload = dict(want)
         if action is Action.APPLY_KEEP_LOGIN:
             payload["login"] = live["payload"]["login"]
-        idem = f"{hid}:{system.value}:{dh}:{action.value}"      # same intent => same key
+        idem = f"{hid}:{system.value}:{dh}:{action.value}"  # same intent => same key
         try:
             self._with_retry(lambda: conn.upsert(hid, payload, idem, force=action is Action.APPLY_FORCE), hid, system)
         except (TransientError, PermanentError) as e:
@@ -153,28 +153,29 @@ class Orchestrator:
                 self.store.audit(hid, system.value, "RETRY", {"attempt": attempt, "error": str(e)})
                 if attempt == self.max_attempts:
                     raise
-                self.sleep(min(2 ** attempt, 30))               # exponential backoff
+                self.sleep(min(2 ** attempt, 30))  # exponential backoff
             # PermanentError propagates immediately
 
     def _fail(self, hid, system, dh, err) -> str:
         self.store.put_ledger(hid, system.value, desired_hash=dh, status=Status.FAILED, last_error=str(err))
         self.store.audit(hid, system.value, "FAILED", {"error": str(err)})
-        self.slack.post(SLACK_CHANNEL, f"[SYNC_FAILED] hire {hid} / {system.value}: {err}. Will retry next run." )
+        self.slack.post(SLACK_CHANNEL, f"[SYNC_FAILED] hire {hid} / {system.value}: {err}. Will retry next run.")
         return Status.FAILED.value
 
     def _quarantine(self, hire: Hire, errs) -> dict[str, str]:
         hid = hire.hire_id
         sig = stable_hash([(e.code, e.field) for e in errs])
-        for s in SYNC_ORDER:                                    # downstream keeps last good data
+        for s in SYNC_ORDER:  # downstream keeps last good data
             led = self.store.get_ledger(hid, s.value)
             self.store.put_ledger(hid, s.value, desired_hash="", status=Status.QUARANTINED,
                                   last_error=",".join(e.code for e in errs),
                                   applied_payload=led["applied_payload"] if led else None)
         self.store.audit(hid, None, "QUARANTINED", {"errors": [e.__dict__ for e in errs]})
-        if self.store.kv_get(f"quarantine:{hid}") != sig:       # don't re-alert on every poll
+        if self.store.kv_get(f"quarantine:{hid}") != sig:  # don't re-alert on every poll
             self.store.kv_set(f"quarantine:{hid}", sig)
             lines = "; ".join(f"{e.field}: {e.message}" for e in errs)
-            self.slack.post(SLACK_CHANNEL, f"[BAD_DATA] hire {hid} held before fan-out, nothing written downstream. {lines}")
+            self.slack.post(SLACK_CHANNEL,
+                            f"[BAD_DATA] hire {hid} held before fan-out, nothing written downstream. {lines}")
         return {s.value: Status.QUARANTINED.value for s in SYNC_ORDER}
 
     # ---------------------------------------------------- off-cycle discovery

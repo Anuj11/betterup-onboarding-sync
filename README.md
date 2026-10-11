@@ -11,7 +11,7 @@ Requires Python 3.10+.
 ```bash
 pip install -r requirements.txt     # pytest always; anthropic only needed for --live
 python -m pytest                    # 26 tests + coverage report (fails under 90%)
-python -m bu_sync.demo              # 9-scenario walkthrough (offline rules stand in for Claude)
+python -m bu_sync.demo              # plain-English walkthrough, 10 self-checking scenarios (offline rules stand in for Claude)
 ```
 
 Optional, to use real Claude decisions:
@@ -54,19 +54,35 @@ python -m pytest                       # runs with coverage by default (pytest.i
 python -m pytest --cov-report=html     # then open htmlcov/index.html
 ```
 
-Branch coverage is on, and the run fails if total coverage drops below 90%. Current result: **26 tests, 98.6% coverage**. The few uncovered lines are the error path when reading a system's live state fails (`orchestrator.py`), the unknown-system `ValueError` in `projections.py`, and a couple of branch exits. The real Claude API call is exercised only through a fake client, so the network path itself is untested.
+Branch coverage is on, and the run fails if total coverage drops below 90%. Current result: **26 tests, 98% coverage**. The few uncovered lines are the error path when reading a system's live state fails (`orchestrator.py`), the unknown-system `ValueError` in `projections.py`, and a couple of branch exits. The real Claude API call is exercised only through a fake client, so the network path itself is untested.
 
-## Demo scenarios (`python -m bu_sync.demo`)
+## Reading the demo output
 
-1. Initial sync of two Ashby hires, plus an off-cycle hire discovered in Workday
-2. Replay of the same events: zero new writes
-3. Start-date move: fans out to every system and recomputes the gate deadlines
-4. Bad Ashby edit (digit in name, short ZIP, weekend start): quarantined, one de-duplicated alert
-5. Okta 503, then a timeout after apply: exactly one real write
-6. Name typo fixed after Okta provisioning: the handler decides, and the old login is kept as an alias
-7. Address change after the label is cut, then after shipping: void and recreate, then notify a human
-8. Workday hard failure: dependents blocked, tracker still updates, next run self-heals
-9. Audit trail: valid chain, then a tamper check
+`python -m bu_sync.demo` is written to be read by someone who has never seen the code. A full captured run is in [`docs/SAMPLE_OUTPUT.txt`](docs/SAMPLE_OUTPUT.txt). Each scenario has the same shape:
+
+```
+SCENARIO 5: Okta has a hiccup in the middle of an update
+   Situation: <what happens in the real world>
+   Expected : <what the system should do>
+   Result:    <per-system outcome in plain words: updated / already up to date / held / waiting ...>
+   [PASS] <a check the demo ran against the mock systems, not just a printed claim>
+```
+
+It ends with the Slack alerts People Ops would receive and a one-line summary. The process exits with a non-zero code if any check fails, so it also works as a smoke test in CI.
+
+| # | Scenario | What it proves |
+|---|---|---|
+| 1 | First sync, incl. a hire created outside Ashby | Off-cycle hires are discovered and set up without overwriting their source system |
+| 2 | Same update arrives twice | Idempotency: zero duplicate writes |
+| 3 | Start date changes | Change fans out to every affected system; deadlines recalculated |
+| 4 | Bad data entered in Ashby | Validation gate: nothing cascades, one alert |
+| 5 | Okta error, then timeout after applying | Safe retries: exactly one real write |
+| 6 | Name typo fixed after Okta account exists | Risky change goes to the exception handler; old login kept as alias |
+| 7 | Address change after label created, then after shipping | Void and recreate when there is time; never touch a shipped package |
+| 8 | Workday rejects an update | Dependents wait, tracker still updates, next run self-heals |
+| 9 | Audit trail | Tamper-evident log; edits to old entries are detected |
+
+(The label-created and already-shipped cases are two separate scenarios in the output, so it shows 10.)
 
 ## Project layout
 
@@ -80,7 +96,8 @@ Branch coverage is on, and the run fails if total coverage drops below 90%. Curr
 | `bu_sync/orchestrator.py` | Ordering, retries, ledger, escalation, human approval, off-cycle discovery |
 | `bu_sync/connectors.py` | Mock Workday/Okta/equipment/tracker/Slack with fault injection |
 | `bu_sync/store.py` | SQLite ledger and hash-chained audit trail |
-| `bu_sync/demo.py` | Runnable walkthrough |
+| `bu_sync/demo.py` | Plain-English, self-checking walkthrough |
+| `docs/SAMPLE_OUTPUT.txt` | Captured demo output |
 | `tests/test_core.py` | Core behaviour: idempotency, failure modes, guard, fallback, PII redaction, audit |
 | `tests/test_extra.py` | Validators, out-of-band edits, human approval, handler rules, demo smoke test |
 | `.coveragerc`, `pytest.ini` | Coverage config (branch coverage, 90% minimum) |

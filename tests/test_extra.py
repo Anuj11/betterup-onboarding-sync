@@ -129,8 +129,11 @@ def test_prev_business_day_and_store_filters(env):
 
 def test_demo_runs_end_to_end(capsys, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    demo.main(live=True)                                  # --live without a key must degrade, not crash
+    assert demo.main(live=True) is True                   # --live without a key must degrade, not crash
     out = capsys.readouterr().out
     assert "using offline rules" in out
-    assert "chain valid: True" in out and "after tampering row 3 -> chain valid: False" in out
-    assert "new writes: {'workday': 0, 'okta': 0, 'equipment': 0, 'tracker': 0}" in out
+    assert "SUMMARY: 10 of 10 scenarios behaved as expected" in out and "All checks passed" in out
+    assert "[FAIL]" not in out
+    for word in ("Situation:", "Expected :", "[PASS]", "ALERTS PEOPLE OPS WOULD HAVE RECEIVED"):
+        assert word in out
+    assert "APPLIED" not in out and "NOOP" not in out    # no raw internal status codes in the client-facing text

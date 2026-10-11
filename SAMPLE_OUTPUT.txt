@@ -1,0 +1,186 @@
+BetterUp onboarding sync - demo on MOCKED systems (no real data, no credentials)
+============================================================================================
+What this shows: when a new hire's details change in Ashby (or a hire is created outside
+Ashby), the change is checked first, then applied safely to every system that needs it.
+
+Systems:  Workday = HR record (source for the others)   Okta = login and email
+          Equipment = laptop shipping                    Tracker = cohort spreadsheet
+Words:    updated | already up to date | held (bad data) | waiting on Workday | failed, will retry |
+          waiting for a human | human notified (system left untouched)
+Who decides on tricky cases: simple built-in rules standing in for Claude (run with --live
+and an API key for real Claude decisions).
+
+--------------------------------------------------------------------------------------------
+SCENARIO 1: First sync of new hires, including one created outside Ashby
+--------------------------------------------------------------------------------------------
+   Situation: Two hires (Jon Smyth, Maria Garcia) are in Ashby. A third (Priya Nair) was
+   entered directly in Workday.
+   Expected : Ashby hires reach all four systems. The Workday-only hire is discovered and
+   her other systems are set up, without writing back to Workday.
+   Jon Smyth (H-1001):
+      Workday    updated
+      Okta       updated
+      Equipment  updated
+      Tracker    updated
+   Maria Garcia (H-1002):
+      Workday    updated
+      Okta       updated
+      Equipment  updated
+      Tracker    updated
+   [PASS] Both Ashby hires were created in all four systems
+   [PASS] Priya (Workday-only) was discovered and given an Okta account
+   [PASS] Workday was not overwritten for Priya (it is her source)
+
+--------------------------------------------------------------------------------------------
+SCENARIO 2: The same update arrives twice
+--------------------------------------------------------------------------------------------
+   Situation: Ashby re-sends the same event (webhook retry) and the nightly poll sees it
+   again.
+   Expected : Nothing is written a second time.
+   Result:
+      Workday    already up to date
+      Okta       already up to date
+      Equipment  already up to date
+      Tracker    already up to date
+   [PASS] Zero new writes across all systems (new writes: 0)
+
+--------------------------------------------------------------------------------------------
+SCENARIO 3: Start date changes after the offer
+--------------------------------------------------------------------------------------------
+   Situation: Jon's start date moves from Mon 26 Oct to Mon 2 Nov.
+   Expected : Every system that depends on the date is updated, including the hardware and
+   background-check deadlines.
+   Result:
+      Workday    updated
+      Okta       updated
+      Equipment  updated
+      Tracker    updated
+   Tracker before -> after:  cohort cohort-2026-10-26 -> cohort-2026-11-02;  hardware form
+   due 2026-10-19 -> 2026-10-26
+   [PASS] All four systems received the new date
+   [PASS] Deadlines were recalculated to 7 days before the new start date (26 Oct), with no manual work
+
+--------------------------------------------------------------------------------------------
+SCENARIO 4: Someone enters bad data in Ashby
+--------------------------------------------------------------------------------------------
+   Situation: Jon's record is edited to: first name 'J0n' (a zero), ZIP '9410' (4 digits),
+   start date on a Saturday.
+   Expected : The edit is stopped BEFORE it reaches any system. The team gets one alert, not
+   one per retry.
+      Problem found - first_name: first_name='J0n' has digits/symbols/extra whitespace; it
+      would flow into the Okta login and shipping label
+      Problem found - start_date: start_date 2026-10-31 is a weekend
+      Problem found - address.postal_code: '9410' invalid for US
+   Result:
+      Workday    held - bad data, nothing changed
+      Okta       held - bad data, nothing changed
+      Equipment  held - bad data, nothing changed
+      Tracker    held - bad data, nothing changed
+   [PASS] No system was changed (the bad name never reached Okta, shipping labels or the tracker)
+   [PASS] Downstream data still holds the last good values
+   [PASS] Only one alert was sent even though the bad record arrived twice
+
+--------------------------------------------------------------------------------------------
+SCENARIO 5: Okta has a hiccup in the middle of an update
+--------------------------------------------------------------------------------------------
+   Situation: Maria's start date changes. Okta first returns an error (503), then accepts
+   the change but the reply is lost (timeout).
+   Expected : The system retries safely. Okta ends up with exactly one update, not
+   duplicates.
+   Result:
+      Workday    updated
+      Okta       updated
+      Equipment  updated
+      Tracker    updated
+   [PASS] Okta was retried 2 times after the two failures
+   [PASS] Okta recorded exactly 1 real change (the retry was recognised as a repeat, not applied twice)
+
+--------------------------------------------------------------------------------------------
+SCENARIO 6: A name typo is fixed AFTER the Okta account exists
+--------------------------------------------------------------------------------------------
+   Situation: Jon's surname 'Smyth' is corrected to 'Smith', and the first name 'Jon' to
+   'John'. Changing it would change his login email.
+   Expected : This is a risky change, so a decision is made: update the login (keeping the
+   old one as an alias) or hold it back.
+   Result:
+      Workday    updated
+      Okta       updated
+      Equipment  updated
+      Tracker    updated
+   Decision: APPLY  (made by: offline-rules)  Reason: account not yet in use, start is >=7d
+   out: rotate login, keep old as alias
+   [PASS] Login is now john.smith@betterup.com, and the old jon.smyth@betterup.com still works as an alias
+
+--------------------------------------------------------------------------------------------
+SCENARIO 7: Address changes after the laptop shipping label was created
+--------------------------------------------------------------------------------------------
+   Situation: Jon moves to a new address. The label for the old address already exists.
+   Expected : With enough time before the start date, the old label is cancelled and a new
+   one is made.
+   Result:
+      Workday    updated
+      Okta       already up to date
+      Equipment  updated
+      Tracker    already up to date
+   Decision: APPLY_FORCE  (made by: offline-rules)  Reason: enough runway to void and reship
+   [PASS] The old label was voided and the new address applied
+
+--------------------------------------------------------------------------------------------
+SCENARIO 8: Address changes again, but the laptop has already shipped
+--------------------------------------------------------------------------------------------
+   Situation: Jon changes address once more, after the package left the warehouse.
+   Expected : The system must NOT try to change a package in transit. It tells a human
+   instead.
+   Result:
+      Workday    updated
+      Okta       already up to date
+      Equipment  human notified, system left untouched
+      Tracker    already up to date
+   [PASS] The shipment was left untouched and People Ops was alerted to arrange a reroute
+
+--------------------------------------------------------------------------------------------
+SCENARIO 9: Workday rejects an update
+--------------------------------------------------------------------------------------------
+   Situation: Maria's start date moves again, but Workday (the HR system everything else
+   depends on) returns an error.
+   Expected : Systems that depend on Workday wait. The tracker, which depends on nothing,
+   still updates. The next run fixes the rest.
+   Run 1 (Workday failing):
+      Workday    failed, will retry on next run
+      Okta       waiting on Workday
+      Equipment  waiting on Workday
+      Tracker    updated
+   Run 2 (next scheduled run):
+      Workday    updated
+      Okta       updated
+      Equipment  updated
+      Tracker    already up to date
+   [PASS] While Workday failed: Okta and Equipment waited, the Tracker still updated
+   [PASS] On the next run everything caught up with no manual cleanup
+
+--------------------------------------------------------------------------------------------
+SCENARIO 10: Audit trail
+--------------------------------------------------------------------------------------------
+   Situation: Every decision and write above was logged in a tamper-evident record (each
+   entry includes a fingerprint of the one before it).
+   Expected : The log verifies as intact, and any edit to an old entry is detected.
+   [PASS] All 54 audit entries verify as intact
+   [PASS] After secretly editing entry #3, verification fails (tampering detected)
+
+--------------------------------------------------------------------------------------------
+ALERTS PEOPLE OPS WOULD HAVE RECEIVED IN SLACK (5)
+--------------------------------------------------------------------------------------------
+  * [BAD_DATA] hire H-1001 held before fan-out, nothing written downstream. first_name:
+    first_name='J0n' has digits/symbols/extra whitespace; it would flow into the Okta login
+    and shipping label; start_date: start_date 2026-10-31 is a weekend; address.postal_code:
+    '9410' invalid for US
+  * [LOGIN_CHANGE_AFTER_PROVISION] hire H-1001 / okta: account not yet in use, start is >=7d
+    out: rotate login, keep old as alias. Action taken: APPLY.
+  * [LABEL_ALREADY_CREATED] hire H-1001 / equipment: enough runway to void and reship.
+    Action taken: APPLY_FORCE.
+  * [ALREADY_SHIPPED] hire H-1001 / equipment: cannot be changed via API; a human must act.
+    Action taken: NOTIFY_ONLY.
+  * [SYNC_FAILED] hire H-1002 / workday: workday: 400 rejected payload. Will retry next run.
+
+============================================================================================
+SUMMARY: 10 of 10 scenarios behaved as expected (18 checks).  All checks passed.

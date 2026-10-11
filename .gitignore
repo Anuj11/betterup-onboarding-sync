@@ -1,12 +1,21 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.pyc
-.pytest_cache/
+
+# Virtual environments
 .venv/
-env
-.env
-*.db
-.coverage
-.github
-.idea
+env/
+
+# IDEs and editors
+.idea/
+.DS_Store
+
+# Testing and coverage reports
+.pytest_cache/
 htmlcov/
+.coverage
 coverage.xml
+
+# Databases and local configuration environments
+*.db
+.env

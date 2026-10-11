@@ -10,7 +10,7 @@ Requires Python 3.10+.
 
 ```bash
 pip install -r requirements.txt     # pytest always; anthropic only needed for --live
-python -m pytest -q                 # 15 tests
+python -m pytest                    # 26 tests + coverage report (fails under 90%)
 python -m bu_sync.demo              # 9-scenario walkthrough (offline rules stand in for Claude)
 ```
 
@@ -47,6 +47,15 @@ Ashby change / off-cycle hire in Workday
 - **Safe at the point of no return:** `policies.py` lists the legal actions, for example Okta already provisioned, label already cut, or package shipped. Claude chooses among them through a forced tool call, and the orchestrator rejects any action outside the list.
 - **Data minimisation:** Claude never sees street, postal code or email addresses.
 
+## Tests and coverage
+
+```bash
+python -m pytest                       # runs with coverage by default (pytest.ini)
+python -m pytest --cov-report=html     # then open htmlcov/index.html
+```
+
+Branch coverage is on, and the run fails if total coverage drops below 90%. Current result: **26 tests, 98.6% coverage**. The few uncovered lines are the error path when reading a system's live state fails (`orchestrator.py`), the unknown-system `ValueError` in `projections.py`, and a couple of branch exits. The real Claude API call is exercised only through a fake client, so the network path itself is untested.
+
 ## Demo scenarios (`python -m bu_sync.demo`)
 
 1. Initial sync of two Ashby hires, plus an off-cycle hire discovered in Workday
@@ -72,7 +81,10 @@ Ashby change / off-cycle hire in Workday
 | `bu_sync/connectors.py` | Mock Workday/Okta/equipment/tracker/Slack with fault injection |
 | `bu_sync/store.py` | SQLite ledger and hash-chained audit trail |
 | `bu_sync/demo.py` | Runnable walkthrough |
-| `tests/test_core.py` | 15 tests covering idempotency, failure modes, guard, fallback, PII redaction, audit |
+| `tests/test_core.py` | Core behaviour: idempotency, failure modes, guard, fallback, PII redaction, audit |
+| `tests/test_extra.py` | Validators, out-of-band edits, human approval, handler rules, demo smoke test |
+| `.coveragerc`, `pytest.ini` | Coverage config (branch coverage, 90% minimum) |
+| `.github/workflows/ci.yml` | CI: tests with coverage, then the demo |
 | `docs/SYSTEMS_MAP.md` | Deliverable 1: systems map and why this slice |
 | `docs/BUILD_NOTE.md` | Deliverable 3: design decisions, productionizing, AI usage |
 
